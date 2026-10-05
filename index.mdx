@@ -1,30 +1,55 @@
 ---
-title: "Observability Guides"
-description: "Short, practical observability guides that extend vendor documentation for specific use cases and technologies."
+title: "Observability Bytes"
+description: "Byte-sized, practical guides that extend vendor documentation for specific use cases and technologies."
 ---
 
-Observability Guides are short how-tos that each cover one use case. The concept is vendor-neutral. Tabs and callouts show the Dynatrace specifics.
+Observability Bytes are short how-tos that each cover one use case. Each one carries a label:
+
+- **Vendor-neutral.** A generic concept, with Dynatrace specifics in tabs and callouts.
+- **Dynatrace.** The steps only work on Dynatrace.
+
+## Correlation
 
 <Columns cols={2}>
   <Card title="Trace and log correlation" icon="link" href="/correlation/trace-log-correlation">
-    Link every log line to its trace.
-  </Card>
-  <Card title="TIBCO BusinessWorks" icon="plug" href="/correlation/tibco-businessworks">
-    Correlation for BW 5 and BW 6.
+    Link every log line to its trace. **Vendor-neutral**
   </Card>
   <Card title="Payment switch logs" icon="credit-card" href="/correlation/payment-switch-logs">
-    XML event logs without trace context.
+    XML event logs without trace context. **Vendor-neutral**
   </Card>
+  <Card title="TIBCO BusinessWorks" icon="plug" href="/correlation/tibco-businessworks">
+    Correlation for BW 5 and BW 6. **Dynatrace**
+  </Card>
+</Columns>
+
+## Kubernetes
+
+<Columns cols={2}>
   <Card title="Namespace-scoped telemetry" icon="dharmachakra" href="/kubernetes/logs-only">
-    Limit logs, traces and metadata to selected namespaces.
+    Limit logs, traces and metadata to selected namespaces. **Dynatrace**
   </Card>
+</Columns>
+
+## Security
+
+<Columns cols={2}>
   <Card title="Sensitive data detection" icon="shield" href="/security/sensitive-data-detection">
-    Find and mask personal data in logs.
+    Find and mask personal data in logs. **Vendor-neutral**
   </Card>
+</Columns>
+
+## Automation
+
+<Columns cols={2}>
   <Card title="Alerts as code" icon="code-branch" href="/automation/alerts-as-code">
-    Manage alerts in Git with Terraform.
+    Manage alerts in Git with Terraform. **Dynatrace**
   </Card>
+</Columns>
+
+## Detection
+
+<Columns cols={2}>
   <Card title="New term detection" icon="magnifying-glass" href="/detection/new-term-detection">
-    Flag first-time entities, such as new beneficiaries.
+    Flag first-time entities, such as new beneficiaries. **Dynatrace**
   </Card>
 </Columns>

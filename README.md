@@ -1,4 +1,4 @@
-# Observability Guides
+# Observability Bytes
 
 Short, practical guides that extend vendor documentation for specific use cases and technologies. Concepts are vendor-neutral, with Dynatrace specifics in tabs and callouts.
 

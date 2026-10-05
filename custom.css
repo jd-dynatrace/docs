@@ -1,0 +1,16 @@
+/* Sidebar tag colors, keyed on the page's `tag` frontmatter value */
+[data-nav-tag="Dynatrace"] {
+  color: #6f2da8 !important;
+  background-color: rgb(111 45 168 / 0.15) !important;
+}
+
+.dark [data-nav-tag="Dynatrace"] {
+  color: #b98ae0 !important;
+  background-color: rgb(111 45 168 / 0.35) !important;
+}
+
+[data-nav-tag="Vendor-neutral"] {
+  color: #111111 !important;
+  background-color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
