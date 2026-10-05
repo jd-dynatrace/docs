@@ -1,0 +1,110 @@
+---
+title: "Alerts as code"
+description: "Manage alert definitions in Git with Terraform so changes are reviewed, versioned and repeatable."
+---
+
+Alerts created by clicking through a UI have no history, no review and drift between environments. Defining them as code puts them through the same branch, review and merge process as the service they watch.
+
+## Why it helps
+
+- **History.** `git blame` explains why a threshold exists.
+- **Review.** Nobody can silently disable a critical alert.
+- **Parity.** The same code applies to dev, staging and production with different variables.
+- **Rollback.** `git revert` restores a previous definition.
+- **Ownership.** A CODEOWNERS file maps alerts to teams.
+
+## Example: alert on failed business transactions
+
+A payment service logs an error when one payment in a batch fails. The alert fires on that log record so an operator can contact the customer before a compliance deadline.
+
+<Tabs>
+  <Tab title="Generic">
+    Define the condition once, in whatever your alerting tool supports:
+
+    - **Source:** logs from the payment service
+    - **Condition:** severity is error
+    - **Evaluation:** every minute over the last five minutes
+    - **Identity:** the service name, so repeats group into one alert
+  </Tab>
+  <Tab title="Dynatrace Terraform">
+    The `dynatrace-oss/dynatrace` provider creates a Davis anomaly detector.
+
+    ```hcl
+    resource "dynatrace_davis_anomaly_detectors" "failed_payment" {
+      title   = "[OAC-${var.owner}] ${var.log_source}: failed payment"
+      source  = var.log_source
+      enabled = true
+
+      analyzer {
+        name = "dt.statistics.anomaly_detection.RecordAnomalyDetectionAnalyzer"
+        input {
+          analyzer_input_field {
+            key   = "query.expression"
+            value = <<-DQL
+              fetch logs, from: now() - 5m
+              | filter log.source == "${var.log_source}"
+              | filter status == "ERROR"
+            DQL
+          }
+          analyzer_input_field {
+            key   = "alertIdentityFields[0]"
+            value = "log.source"
+          }
+        }
+      }
+
+      event_template {
+        properties {
+          property {
+            key   = "event.type"
+            value = "ERROR_EVENT"
+          }
+          property {
+            key   = "event.name"
+            value = "Failed payment on ${var.log_source}"
+          }
+        }
+      }
+
+      execution_settings {
+        actor = var.actor_id
+        delay = 300
+      }
+    }
+    ```
+
+    Prerequisites:
+
+    - Terraform 1.6 or later.
+    - A platform token with `settings:objects:read`, `settings:objects:write` and `settings:schemas:read`.
+    - `DYNATRACE_ENV_URL` and `DYNATRACE_PLATFORM_TOKEN` set as environment variables.
+  </Tab>
+</Tabs>
+
+## Mark managed objects
+
+Put a prefix such as `[OAC-<owner>]` in every title. It shows at a glance which alerts come from code. It also warns people that a manual edit is overwritten on the next apply.
+
+## Tighten the condition
+
+An error from the service is a broad trigger. For production use:
+
+- Filter on the business status, not just the log level.
+- Narrow by error code, because some errors resolve themselves.
+- Restrict to the production environment.
+- Filter on the exact service entity.
+
+If the value sits inside a JSON string, promote it to its own attribute at ingest. Parsing it in every query is slower and more fragile.
+
+<Tip>
+Use semantic fields such as `log.source` over custom ones. They work with correlation, dashboards and downstream tooling.
+</Tip>
+
+## Test that it fires
+
+Send a sample log payload that includes one failing record, then check that the detector raises an event. Run `terraform plan` first to review the change.
+
+## Reference
+
+- [Dynatrace Terraform provider](https://registry.terraform.io/providers/dynatrace-oss/dynatrace/latest/docs)
+- [Semantic dictionary](https://docs.dynatrace.com/docs/semantic-dictionary) in the Dynatrace documentation

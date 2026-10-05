@@ -1,0 +1,141 @@
+---
+title: "Limit Kubernetes telemetry to selected namespaces"
+sidebarTitle: "Namespace-scoped telemetry"
+description: "Collect logs, traces and metadata from specific namespaces only, without enabling cluster monitoring."
+---
+
+By default, a cluster-wide deployment collects from every workload. Scoping collection to named namespaces keeps the footprint small, limits ingest volume and keeps unrelated teams' data out of your tenant. This guide covers three signals: logs, traces and Kubernetes metadata.
+
+## Before you start
+
+- A Kubernetes or OpenShift cluster and permission to install an operator.
+- An API token and a data ingest token for your environment.
+- Log ingest rules enabled in your environment for the namespaces you select.
+
+## Select namespaces per signal
+
+Each signal has its own selector. They are independent, so a namespace can send logs without traces, or the reverse.
+
+| Signal | DynaKube setting | Selects by |
+|---|---|---|
+| Logs | `spec.logMonitoring.ingestRuleMatchers` | Attribute and values, such as `k8s.namespace.name` |
+| Traces | `spec.oneAgent.applicationMonitoring.namespaceSelector` | Namespace label selector |
+| Metadata | `spec.metadataEnrichment.namespaceSelector` | Namespace label selector |
+
+## Configure with Dynatrace
+
+In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Leave out the `activeGate` block with the `kubernetes-monitoring` capability. Without it you get no cluster, node or workload monitoring.
+
+<Tabs>
+  <Tab title="Logs and metadata">
+    ```yaml
+    apiVersion: dynatrace.com/v1beta6
+    kind: DynaKube
+    metadata:
+      name: scoped-telemetry
+      namespace: dynatrace
+    spec:
+      apiUrl: https://<environment-id>.live.dynatrace.com/api
+      metadataEnrichment:
+        enabled: true
+        namespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: In
+              values:
+                - checkout
+      templates:
+        logMonitoring:
+          imageRef:
+            repository: public.ecr.aws/dynatrace/dynatrace-logmodule
+            tag: <log-module-version>
+      logMonitoring:
+        ingestRuleMatchers:
+          - attribute: k8s.namespace.name
+            values:
+              - checkout
+    ```
+  </Tab>
+  <Tab title="Add traces">
+    Add application monitoring for the namespaces whose traces you want.
+
+    ```yaml
+    spec:
+      oneAgent:
+        applicationMonitoring:
+          codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:<version>
+          namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  - checkout
+                  - catalog
+    ```
+
+    When traces and logs come from the same workloads, you can [correlate them](/correlation/trace-log-correlation).
+  </Tab>
+</Tabs>
+
+<Warning>
+Keep tokens out of version control. Store them in a Kubernetes secret and reference that secret from the `DynaKube`.
+</Warning>
+
+## OpenShift
+
+On OpenShift, and on any cluster that enforces SELinux, the bootstrapper init container can't read the host paths the log module needs. The log monitoring DaemonSet then ends in `Init:Error` or `CrashLoopBackOff`.
+
+Add the `oneagent-privileged` annotation to the `DynaKube`:
+
+```yaml
+metadata:
+  name: scoped-telemetry
+  namespace: dynatrace
+  annotations:
+    feature.dynatrace.com/oneagent-privileged: "true"
+```
+
+Then restart the DaemonSet:
+
+```bash
+kubectl rollout restart daemonset -n dynatrace <log-monitoring-daemonset-name>
+```
+
+## Verify
+
+1. Apply the manifest and wait for the Dynatrace pods to reach `Running`.
+2. Write some output in a selected namespace and in one that isn't selected.
+3. Filter logs on `k8s.namespace.name`. Only the selected namespace should appear.
+4. Open a trace from a selected workload and confirm it carries the Kubernetes metadata.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="DaemonSet stuck in Init:Error or CrashLoopBackOff">
+    SELinux blocks the bootstrapper init container from reading host paths. Add the annotation described in [OpenShift](#openshift) and restart the DaemonSet.
+  </Accordion>
+  <Accordion title="Some namespaces ingest and others don't">
+    Work through these causes in order:
+
+    | Cause | Fix |
+    |---|---|
+    | No ingest rule for the namespace | Add a `k8s.namespace.name` matcher to the ingest rule. |
+    | OneAgent isn't running on the node that hosts the pod | Confirm the OneAgent DaemonSet has a pod on every affected node. |
+    | A custom log source conflicts on `/var/log/pods` | Remove the custom source. It blocks Kubernetes enrichment. |
+    | A higher-priority scope has an exclude override | Check the host, host group and environment scopes for conflicting rules. |
+    | The `dynatrace` namespace is missing | It's excluded by default. Turn on **Allow OneAgent to monitor Dynatrace logs** under **Settings** > **Collect and capture** > **Log Monitoring** > **Advanced log settings**. |
+  </Accordion>
+  <Accordion title="Logs arrive without metadata">
+    The metadata selector is separate from the log selector. Add the namespace to `metadataEnrichment.namespaceSelector`.
+  </Accordion>
+  <Accordion title="Traces missing for a namespace">
+    Application monitoring only injects into pods created after the namespace matches the selector. Restart the workload.
+  </Accordion>
+</AccordionGroup>
+
+{/* TODO: Verify the minimum Operator version for the v1beta6 DynaKube API */}
+
+## Reference
+
+- [DynaKube parameters](https://docs.dynatrace.com/docs/ingest-from/setup-on-k8s/reference/dynakube-parameters) in the Dynatrace documentation
+- [Troubleshooting Kubernetes logs in Log module](https://community.dynatrace.com/t5/Troubleshooting/Troubleshooting-Kubernetes-logs-in-Log-module/ta-p/300204) in the Dynatrace Community

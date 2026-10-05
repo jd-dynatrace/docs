@@ -1,0 +1,78 @@
+---
+title: "New term detection"
+description: "Flag events that involve an entity not seen before, such as a first-time payment beneficiary."
+---
+
+"Never seen before" is a strong signal in fraud and security work. Examples: a payment to a new beneficiary, a login from a new IP, or a call from a new API consumer. The pattern is the same each time: keep a list of known values per key and compare each new event against it.
+
+## How it works
+
+Two scheduled jobs share one lookup table.
+
+| Job | What it does |
+|---|---|
+| Detect | Joins recent events to the lookup and flags values that are not in it. |
+| Update | Adds the values seen in recent events to the lookup. |
+
+Run **Detect before Update**. A new value raises an alert once, then the update adds it so the next run is clean.
+
+## Build it in Dynatrace
+
+In Dynatrace, both jobs are Automations workflows and the known list is a Grail lookup table.
+
+<Steps>
+  <Step title="Build the lookup">
+    Aggregate the distinct values per key from completed transactions.
+
+    ```dql
+    fetch logs, from: now() - 24h
+    | filter log.source == "banking.transaction"
+    | filter transaction.status == "COMPLETED"
+    | summarize beneficiaries = collectDistinct(beneficiary.account),
+                transaction_count = count(),
+                by: {account.id}
+    ```
+
+    Store the result in a lookup named `banking_beneficiaries`, with `account.id` as the key. Refresh it by upsert so each account stays one row.
+  </Step>
+  <Step title="Detect new values">
+    ```dql
+    fetch logs, from: now() - 6m
+    | filter log.source == "banking.transaction"
+    | filter transaction.status == "COMPLETED"
+    | lookup [load "/lookups/banking_beneficiaries"], sourceField: account.id, lookupField: account.id
+    | fieldsAdd is_new = isNull(lookup.beneficiaries) or not(in(beneficiary.account, lookup.beneficiaries))
+    | filter is_new == true
+    ```
+
+    The six-minute window overlaps the five-minute schedule so no event falls between runs.
+  </Step>
+  <Step title="Schedule and notify">
+    Run Detect at minutes 0, 5, 10 and so on, and Update one minute later. Send flagged rows to a notification channel or raise an event.
+  </Step>
+</Steps>
+
+## Adapt it
+
+| Change | To |
+|---|---|
+| `banking.transaction` | Your log source |
+| `beneficiary.account` | The field that defines a new entity |
+| `account.id` | Your grouping key, such as user or tenant |
+| `banking_beneficiaries` | Your lookup name |
+
+## Considerations
+
+<AccordionGroup>
+  <Accordion title="Cold start">
+    Until the lookup is populated, every event looks new. Build it from history before you enable alerts.
+  </Accordion>
+  <Accordion title="Lookup size">
+    A row per key with an array of values grows with activity. Expire old values or window the history if it gets large.
+  </Accordion>
+  <Accordion title="Legitimate new values">
+    New is not always bad. Combine the flag with amount, time of day or velocity before you page someone.
+  </Accordion>
+</AccordionGroup>
+
+{/* TODO: Add the optional topology view that maps accounts to beneficiaries */}

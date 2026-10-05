@@ -1,0 +1,74 @@
+---
+title: "Correlate logs from payment switches"
+sidebarTitle: "Payment switch logs"
+description: "Ingest XML event logs from payment switch platforms such as BASE24 and link them to the transactions they belong to."
+---
+
+Payment switch and mainframe-adjacent platforms often write XML event logs and have no agent that injects trace context. You still get correlation, but through business keys in the log instead of trace IDs, unless you can change what the application writes.
+
+## Typical log shape
+
+```xml
+<Event xmlns="http://www.example.com">
+    <DateTime>2025-10-10T10:00:00.000+04:00</DateTime>
+    <TaskID>123****890</TaskID>
+    <ThreadID>123****891</ThreadID>
+    <UniqueEventID>1</UniqueEventID>
+    <Generator>XXXX.XX3</Generator>
+    <Severity>Info</Severity>
+    <EventText>ATMLIB: Channel = 0**0 Sequence = * ATM Offline</EventText>
+    <SubsystemID>1**4</SubsystemID>
+    <EventNumber>1*3</EventNumber>
+</Event>
+```
+
+Each `Event` carries a timestamp, severity, a task and thread identifier, and free text. Values are already masked at the source.
+
+## Choose a correlation method
+
+| Method | Use it when |
+|---|---|
+| Trace IDs in the record | The calling application is instrumented and can pass context into the log. |
+| `[!dt ...]` notation | You can change the text the application writes but not its framework. |
+| Business keys | You can't change the log. Correlate on task ID, thread ID or a transaction reference. |
+
+## Ingest the logs
+
+<Steps>
+  <Step title="Collect the file">
+    Point log ingestion at the directory that holds the XML files. With OneAgent, add a custom log source rule for the path.
+  </Step>
+  <Step title="Parse the XML">
+    Extract the fields you filter on, such as severity, task ID and event number, into log attributes. Do this in the ingest pipeline so queries don't parse text at read time.
+  </Step>
+  <Step title="Map severity">
+    Map the source severity values to the standard log levels so alerts and dashboards treat them like other logs.
+  </Step>
+</Steps>
+
+<Note>
+In Dynatrace, parse and map fields with OpenPipeline processing rules on the logs pipeline.
+</Note>
+
+## Correlate on a business key
+
+When there are no trace IDs, group on the key that ties the events together:
+
+```dql
+fetch logs, from: now() - 1h
+| filter log.source == "payment-switch"
+| filter task_id == "123****890"
+| sort timestamp asc
+```
+
+{/* TODO: Verify the attribute names produced by your parsing rule and the log.source value */}
+
+## Considerations
+
+- **Order.** Sort on the event timestamp, not the ingest time, when you rebuild a sequence.
+- **Time zone.** The sample uses an offset timestamp. Confirm it is parsed with its offset.
+- **Masking.** Keep the masking at the source. See [Detect sensitive data in logs](/security/sensitive-data-detection).
+
+## Related
+
+- [Trace and log correlation](/correlation/trace-log-correlation)

@@ -1,0 +1,80 @@
+---
+title: "Detect sensitive data in logs"
+description: "Find personal data such as emails, card numbers and national IDs in log content with pattern matching, then mask it."
+---
+
+Logs often contain personal data that nobody meant to write. Scanning for it tells you where the leaks are before you decide what to mask or drop.
+
+## Approach
+
+1. Scan log content with patterns for each data type.
+2. Review which sources match.
+3. Mask or remove the data before it is stored or queried.
+
+## Scan with pattern matching
+
+<Tabs>
+  <Tab title="Generic">
+    Use regular expressions in your log pipeline or search tool.
+
+    | Data | Pattern idea |
+    |---|---|
+    | Email | `[\w.+-]+@[\w-]+\.[\w.]+` |
+    | Card number | Four groups of 3 or 4 digits, then a Luhn check |
+    | IP address | Four dotted octets |
+    | IBAN | Two letters, two digits, up to 30 alphanumerics |
+    | National ID | Fixed digit length per country, anchored on a field label |
+  </Tab>
+  <Tab title="Dynatrace DQL">
+    DQL uses the Data Pattern Language (DPL) in `matchesPattern()`.
+
+    ```dql
+    fetch logs, from: now() - 7d
+    | fieldsAdd
+        pii.ip          = matchesPattern(content, "DATA? IPADDR DATA?"),
+        pii.email       = matchesPattern(content, "DATA? '@' DATA?"),
+        pii.phone       = matchesPattern(content, "DATA? '+' [0-9 .-]{6,17} DATA?"),
+        pii.credit_card = matchesPattern(content, "DATA? DIGIT{4} DATA? DIGIT{4} DATA? DIGIT{4} DATA? DIGIT{3,4} DATA?"),
+        pii.iban        = matchesPattern(content, "DATA? 'iban=' DATA?")
+    | filter pii.ip or pii.email or pii.phone or pii.credit_card or pii.iban
+    | summarize matches = count(), by: {log.source}
+    ```
+
+    Three DPL rules to know:
+
+    - **Wrap patterns in `DATA?`.** Without it, `DIGIT{9}` must match from the start of the field.
+    - **Chain groups with `DATA?`.** `DIGIT{4} DATA? DIGIT{4}` crosses spaces and dashes. `DIGIT{4} SPACE DIGIT{4}` does not.
+    - **Anchor on a literal.** Character classes work only after a literal such as `'iban='`.
+  </Tab>
+</Tabs>
+
+<Warning>
+Fixed-length digit patterns also match timestamps, counters and other numbers. Anchor on a field label before you use a match to drive masking or alerts.
+</Warning>
+
+## Mask the data
+
+Scanning finds the data. Masking removes it. Choose where:
+
+| Where | Effect |
+|---|---|
+| At the source | The data never leaves the host. Strongest option. |
+| In the ingest pipeline | The data is redacted before storage. |
+| At query time | Stored data stays, but users without permission see a masked value. |
+
+<Note>
+In Dynatrace, use OpenPipeline processing rules for ingest-time masking and Sensitive Data Center to find and manage sensitive data.
+</Note>
+
+## Test with synthetic data
+
+Test patterns on made-up records before you run them against production. The DQL `data` command lets you embed records in the query, so no ingest is needed.
+
+```dql
+data record(content = "card=4111 1111 1111 1111 email=a.b@example.com")
+| fieldsAdd pii.email = matchesPattern(content, "DATA? '@' DATA?")
+```
+
+## Reference
+
+- [Sensitive Data Center](https://docs.dynatrace.com/docs/platform/sensitive-data-center) in the Dynatrace documentation

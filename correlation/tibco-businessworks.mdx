@@ -1,0 +1,95 @@
+---
+title: "Correlate on TIBCO BusinessWorks"
+sidebarTitle: "TIBCO BusinessWorks"
+description: "Add trace and span IDs to BusinessWorks 5 and 6 logs."
+---
+
+BusinessWorks (BW) 6 logs through Logback. BW 5 logs through Log4j. The steps differ, so each version has its own section. For the concept, see [Trace and log correlation](/correlation/trace-log-correlation).
+
+<Note>
+If the application writes its own business or statistics log, add the IDs in that same code path. Confirm whether it goes through the engine logger, where patterns and MDC apply, or writes directly.
+</Note>
+
+## Before you start
+
+- A distributed trace must be captured for the transaction.
+- Check the OneAgent technology support page for your BW version. Support is version specific. BW 6.6 to 6.8 arrived in OneAgent 1.235.
+- Manual enrichment needs OneAgent 1.239 or later.
+
+## BusinessWorks 6
+
+The AppNode log file is `BW_HOME/domains/<domain>/<AppSpace>/<AppNode>/logback.xml`. TIBCO creates it after the AppNode first starts. You can also upload or download it in the Admin UI.
+
+<Tabs>
+  <Tab title="A. Automatic enrichment">
+    First choice. No change to the TIBCO configuration.
+
+    1. Go to **Settings** > **Preferences** > **OneAgent features**.
+    2. Filter for log enrichment and turn it on for Logback.
+    3. Use a process group override to limit it to the BW process groups.
+  </Tab>
+  <Tab title="B. Manual in logback.xml">
+    Use this when automatic enrichment does not reach the target log.
+
+    For JSON output with the Logstash encoder:
+
+    ```xml
+    <mdc>
+      <includeMdcKeyName>dt.trace_id</includeMdcKeyName>
+      <includeMdcKeyName>dt.span_id</includeMdcKeyName>
+    </mdc>
+    ```
+
+    For plain text output, add this to the pattern:
+
+    ```text
+    dt.trace_id=%X{dt.trace_id} dt.span_id=%X{dt.span_id}
+    ```
+  </Tab>
+  <Tab title="C. TIBCO OpenTelemetry IDs">
+    Use this when A and B don't work. Requires BW 6.11 or later and adds trace volume.
+
+    1. Set `bw.engine.opentelemetry.enable=true` in `BW_JAVA_OPTS`, the AppNode `config.ini`, or the Admin UI.
+    2. Map the TraceId and SpanId from the ProcessContext to the Log or Write File activity.
+    3. Write them out as `dt.trace_id` and `dt.span_id`.
+
+    <Warning>
+    These IDs come from TIBCO's own OpenTelemetry spans. They match Dynatrace traces only if those spans are sent to Dynatrace. TIBCO also has its own span sampler, separate from Dynatrace sampling. Test before you rely on it.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## BusinessWorks 5
+
+No TIBCO documentation for OpenTelemetry in BW 5 was found. Treat the steps below as a plan to validate.
+
+<Steps>
+  <Step title="Find the active configuration">
+    The file is `BW_HOME/lib/log4j.properties` or `log4j.xml`. From BW 5.9, `log4j.xml` loads by default. To see which file is used, set `java.property.log4j.debug` to `true`. Back up the file before you edit it.
+  </Step>
+  <Step title="Add the IDs to the pattern">
+    ```text
+    dt.trace_id=%X{dt.trace_id} dt.span_id=%X{dt.span_id}
+    ```
+  </Step>
+  <Step title="Restart and check">
+    Restart the engine and check a test log line. If the values are empty, OneAgent is not filling the Log4j MDC for this engine.
+  </Step>
+  <Step title="Fallback: OneAgent SDK">
+    Read the trace context with the OneAgent SDK in custom Java code called from the process, and write it into the log record. This needs a BW developer.
+  </Step>
+</Steps>
+
+## Items to confirm
+
+- The BW and Log4j or Logback versions in use.
+- Whether business logs go through the engine logger.
+- Whether BW 5 can produce JSON or only plain text.
+- Whether sampled-only correlation is acceptable for your drill-downs.
+
+## References
+
+- [BW 6.8 logging](https://docs.tibco.com/pub/activematrix_businessworks/6.8.0/doc/html/administration/logging.htm)
+- [BW 6.11 OpenTelemetry](https://docs.tibco.com/pub/activematrix_businessworks/6.11.0/doc/html/administration/opentelemetry.htm)
+- [BW 5.14 logging for third-party components](https://docs.tibco.com/pub/activematrix_businessworks/5.14.1/doc/html/tib_bw_process_design/dg.4.091.htm)
+- [Technology support](https://docs.dynatrace.com/docs/ingest-from/technology-support) in the Dynatrace documentation

@@ -1,0 +1,119 @@
+---
+title: "Trace and log correlation"
+description: "Add trace and span IDs to log records so you can move from a trace to its logs and back."
+---
+
+A trace shows the path of a request and where time was spent. A log explains why: the error message, the business values, the decision the code took. When every log line carries the IDs of the trace and span that produced it, you can move between the two without matching timestamps.
+
+## What you get
+
+- **Faster root cause.** Go from a failed request straight to the error that caused it.
+- **Full transaction context.** See every log record for one transaction across services and hosts.
+- **Business to technical drill-down.** Follow a failing business event in a log to the trace behind it.
+- **Coverage for legacy platforms.** Integration and mainframe systems often hold their detail in logs.
+
+## How it works
+
+An observability backend links a log record to a trace when the record contains the trace ID and span ID.
+
+| Field | Purpose |
+|---|---|
+| Trace ID | Identifies the whole transaction |
+| Span ID | Identifies one step within the transaction |
+| Sampled flag | Shows whether the trace was stored (optional) |
+
+You can add the IDs in three ways:
+
+| Approach | Use it when |
+|---|---|
+| Automatic enrichment by the agent | Your logging framework is supported. Start here. |
+| Manual enrichment in the log pattern | The framework is not supported, or you write custom logs. |
+| OpenTelemetry context | The technology is not covered by an agent. Read the IDs from the active span and write them into the record. |
+
+<Note>
+A trace must exist before a log can link to it. Check that distributed tracing is active for the service first.
+</Note>
+
+## Enable it with Dynatrace
+
+<Tabs>
+  <Tab title="OneAgent automatic">
+    1. Go to **Settings** > **Preferences** > **OneAgent features**.
+    2. Filter for log enrichment and turn on the feature for your logging framework.
+    3. Scope it to selected process groups to roll out gradually.
+
+    OneAgent adds `dt.trace_id` and `dt.span_id` to each log record.
+  </Tab>
+  <Tab title="Manual (MDC or pattern)">
+    Add the keys to your log pattern or JSON encoder. For a plain text Logback pattern:
+
+    ```text
+    dt.trace_id=%X{dt.trace_id} dt.span_id=%X{dt.span_id}
+    ```
+
+    For JSON output with the Logstash encoder, include the MDC keys:
+
+    ```xml
+    <mdc>
+      <includeMdcKeyName>dt.trace_id</includeMdcKeyName>
+      <includeMdcKeyName>dt.span_id</includeMdcKeyName>
+    </mdc>
+    ```
+  </Tab>
+  <Tab title="Plain text notation">
+    OneAgent 1.239 and later reads attributes written as `[!dt key=value]` from log content, turns them into log attributes, and removes the section from the message.
+
+    ```text
+    GET /index.htm 404 [!dt dt.trace_id=aa764ee37ebaa764ee37eaa764ee37e,dt.span_id=b93ede8b93ede8]
+    ```
+
+    Don't use double quotes, escape invalid characters, and leave out line breaks.
+  </Tab>
+  <Tab title="Log ingestion API">
+    When you send logs to the API yourself, use the `trace_id` and `span_id` attributes.
+
+    ```json
+    {
+      "content": "Payment declined",
+      "severity": "error",
+      "trace_id": "aa764ee37ebaa764ee37eaa764ee37e",
+      "span_id": "b93ede8b93ede8"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Design considerations
+
+<AccordionGroup>
+  <Accordion title="Sampling">
+    Traces are often sampled to control cost. Logs still carry the IDs, but only stored traces can be opened. Make each log record useful on its own and treat the trace as a bonus.
+  </Accordion>
+  <Accordion title="Volume and cost">
+    The two IDs add little to each record. The number of logs you send drives cost. Start with targeted logs and widen once the value is proven.
+  </Accordion>
+  <Accordion title="Sensitive data">
+    Mask or exclude sensitive fields, such as card numbers, before ingest. See [Detect sensitive data in logs](/security/sensitive-data-detection).
+  </Accordion>
+  <Accordion title="High cardinality">
+    Trace and span IDs are unique per record. Use them for navigation, not as filter facets.
+  </Accordion>
+</AccordionGroup>
+
+## Validate
+
+1. Run a test transaction.
+2. Open the log record and confirm both IDs are present.
+3. Open the trace from the log, or open the trace and check its logs.
+
+| Symptom | Check |
+|---|---|
+| No IDs in the record | The enrichment feature is off, the agent is too old, or the logging context is not populated. |
+| IDs present, no trace to open | The trace was dropped by sampling, or tracing is not active for the service. |
+| Logs missing | The file is not ingested by the agent or sent through the API. |
+
+## Related
+
+- [Trace and log correlation on TIBCO BusinessWorks](/correlation/tibco-businessworks)
+- [Correlate logs from payment switches](/correlation/payment-switch-logs)
+- [Connect log data to traces](https://docs.dynatrace.com/docs/analyze-explore-automate/logs/lma-log-enrichment) in the Dynatrace documentation
