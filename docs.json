@@ -71,5 +71,9 @@
   "appearance": {
     "default": "dark",
     "strict": false
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
   }
 }

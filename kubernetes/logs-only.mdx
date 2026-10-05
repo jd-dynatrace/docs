@@ -25,7 +25,7 @@ Each signal has its own selector. They are independent, so a namespace can send 
 
 ## Configure with Dynatrace
 
-In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is always enabled and scoped to the same namespaces as the other signals. Every example leaves out the `activeGate` block with the `kubernetes-monitoring` capability. Without it you get no cluster, node or workload monitoring.
+In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is always enabled and scoped to the same namespaces as the other signals. The examples don't pin any image versions, like the default DynaKube. Each pin is shown as an optional, commented-out block. Every example leaves out the `activeGate` block with the `kubernetes-monitoring` capability. Without it you get no cluster, node or workload monitoring.
 
 <Tabs>
   <Tab title="Logs only">
@@ -58,11 +58,13 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
                 - checkout
 
       # Logs: the log module reads container logs on each node.
-      templates:
-        logMonitoring:
-          imageRef:
-            repository: public.ecr.aws/dynatrace/dynatrace-logmodule
-            tag: <log-module-version>
+      # Optional: pin the log module version. The default DynaKube sets no
+      # image, so the operator picks the version. Uncomment to pin one.
+      # templates:
+      #   logMonitoring:
+      #     imageRef:
+      #       repository: public.ecr.aws/dynatrace/dynatrace-logmodule
+      #       tag: <log-module-version>
       logMonitoring:
         # Only logs that match a rule are ingested. Match on the namespace name.
         ingestRuleMatchers:
@@ -83,7 +85,7 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
       name: scoped-telemetry
       namespace: dynatrace
       annotations:
-        # Pull the OneAgent code modules from the public registry.
+        # Optional: pull the OneAgent code modules from the public registry.
         feature.dynatrace.com/use-public-registry: "true"
         # Only needed on OpenShift and other SELinux-enforcing clusters.
         # See the OpenShift section below.
@@ -105,7 +107,9 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
       # Traces: OneAgent code modules are injected into pods at startup.
       oneAgent:
         applicationMonitoring:
-          codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:<version>
+          # Optional: pin the code modules version. Leave it out and the
+          # operator uses the default image for your environment.
+          # codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:<version>
           # Only pods in namespaces that match are instrumented.
           namespaceSelector:
             matchExpressions:
@@ -127,7 +131,7 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
       name: scoped-telemetry
       namespace: dynatrace
       annotations:
-        # Pull the OneAgent code modules from the public registry.
+        # Optional: pull the OneAgent code modules from the public registry.
         feature.dynatrace.com/use-public-registry: "true"
         # Only needed on OpenShift and other SELinux-enforcing clusters.
         # See the OpenShift section below.
@@ -147,11 +151,13 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
                 - checkout
 
       # Logs: the log module reads container logs on each node.
-      templates:
-        logMonitoring:
-          imageRef:
-            repository: public.ecr.aws/dynatrace/dynatrace-logmodule
-            tag: <log-module-version>
+      # Optional: pin the log module version. The default DynaKube sets no
+      # image, so the operator picks the version. Uncomment to pin one.
+      # templates:
+      #   logMonitoring:
+      #     imageRef:
+      #       repository: public.ecr.aws/dynatrace/dynatrace-logmodule
+      #       tag: <log-module-version>
       logMonitoring:
         # Only logs that match a rule are ingested. Match on the namespace name.
         ingestRuleMatchers:
@@ -162,7 +168,9 @@ In Dynatrace, the Dynatrace Operator reads a `DynaKube` resource. Metadata is al
       # Traces: OneAgent code modules are injected into pods at startup.
       oneAgent:
         applicationMonitoring:
-          codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:<version>
+          # Optional: pin the code modules version. Leave it out and the
+          # operator uses the default image for your environment.
+          # codeModulesImage: public.ecr.aws/dynatrace/dynatrace-codemodules:<version>
           # Only pods in namespaces that match are instrumented.
           namespaceSelector:
             matchExpressions:
